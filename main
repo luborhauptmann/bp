@@ -1,0 +1,197 @@
+#define BLYNK_PRINT Serial                                                        //
+#define W5100_CS  10                                                              // Definovani pinu
+#define SDCARD_CS 4                                                               //
+#define DETECT 13
+#include <SPI.h>                                                                  //
+#include <Ethernet.h>                                                             //
+#include <BlynkSimpleEthernet.h>                                                  //
+#include <Wire.h>                                                                 //
+#include <BH1750.h>                                                               // Pouzite knihovny
+#include <OneWire.h>                                                              //
+#include <DallasTemperature.h>                                                    //
+#include <RTClib.h>                                                               //
+#include <Fuzzy.h>                                                                //
+#include <SD.h>
+
+RTC_DS3231 rtc;                                                                   //
+BH1750 lightMeter;                                                                //
+
+char auth[] = "P83bBj-VgQx9aQEpjpHnGEfH5EjDRgvF";                                 // Autorizacni kod do aplikace Blynk
+
+
+                                                                                  //
+int rok = 2020;                                                                   //
+int mesic = 12;                                                                   //
+int denn = 20;                                                                    //
+int hodiny = 10;                                                                  //
+int minuty = 10;                                                                  //
+int sekundy = 45;                                                                 //                                                                               
+int hodKrmeni = 19;                                                               //
+int minKrmeni = 30;                                                               // 
+const int topeniPin = 7;                                                          //
+const int svetloPin = 9;                                                          //
+const int cerpadloPin = 5;                                                        //
+const int pinCidlaDS = 8;                                                         //
+float t;                                                                          //
+float pt = 26;                                                                    //
+float h = 0.5;                                                                    // Vytvoření proměnných
+int davka = 1;                                                                    //                                                                              
+int pole[299];                                                                    //
+int ukazatel = 0;                                                                 //
+float avgLux;                                                                     //
+float lux;                                                                        //                                                                                  
+const int in1 = 2;                                                                //
+const int in2 = 3;                                                                //
+const int in3 = 11;                                                               //
+const int in4 = 12;                                                               //
+int rychlost = 1;                                                                 //
+int uhel = 360;                                                                   //
+int nekrmit = 0;                                                                  //
+int zapis1 = 0;                                                                   //
+int zapis2 = 0;                                                                   //
+int zapis3 = 0;                                                                   //
+int prvniZapisHod = 17;                                                           //
+int prvniZapisMin = 0;                                                            //
+int druhyZapisHod = 21;                                                           //
+int druhyZapisMin = 0;                                                            //
+
+OneWire oneWireDS(pinCidlaDS);                                                    // Vytvoření instance oneWireDS z knihovny OneWire
+DallasTemperature senzoryDS(&oneWireDS);                                          // Vytvoření instance senzoryDS z knihovny DallasTemperature
+
+Fuzzy *fuzzy = new Fuzzy();                                                       // Instance Fuzzy objektu
+
+FuzzySet *den = new FuzzySet(0, 0, 50400, 54000);                                 //
+FuzzySet *brzy = new FuzzySet(50400, 57600, 57600, 64800);                        //
+FuzzySet *akorat = new FuzzySet(59400, 66600, 66600, 73800);                      // Input cas
+FuzzySet *pozde = new FuzzySet(68400, 75600, 75600, 82800);                       //
+FuzzySet *noc = new FuzzySet(79200, 82800, 86400, 86400);                         //
+
+FuzzySet *tma = new FuzzySet(0, 0, 0, 100);                                       // Input svitivost
+FuzzySet *svetlo = new FuzzySet(100, 4000, 4000, 4000);                           //
+
+FuzzySet *vypnuto = new FuzzySet(0, 0, 0, 0.5);                                   // Input sviceni
+FuzzySet *zapnuto = new FuzzySet(0.5, 1, 1, 1);                                   //
+
+void setup(void) {
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+  pinMode(in3, OUTPUT);
+  pinMode(in4, OUTPUT);
+  pinMode(DETECT, INPUT);
+  pinMode(svetloPin, OUTPUT);                                                     //
+  pinMode(topeniPin, OUTPUT);                                                     //
+  SD.begin();
+  rtc.begin();                                                                    //
+  Blynk.begin(auth);                                                              //
+  Serial.begin(9600);                                                             // Zahájení komunikací a nastavení času
+  lightMeter.begin();                                                             //
+  senzoryDS.begin();                                                              //
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));                                 //
+  if (! rtc.begin()) {                                                            //
+    Serial.println("Couldn't find RTC");                                          //
+    while (1);
+  }     
+  fuzzySetup();                                                                   // Vlastní funkce
+  zaplneniPole();                                                                 //
+}
+
+BLYNK_WRITE(V5){                                                                  //
+  hodiny = param.asInt();                                                         //
+  rtc.adjust(DateTime(rok,mesic,denn,hodiny,minuty,sekundy));                     //
+    }                                                                             //
+BLYNK_WRITE(V6){                                                                  //
+  minuty = param.asInt();                                                         //
+  rtc.adjust(DateTime(rok,mesic,denn,hodiny,minuty,sekundy));                     //
+    }                                                                             //
+BLYNK_WRITE(V7){                                                                  //
+  pt = param.asFloat();                                                           // Ovladani aplikace
+    }                                                                             //
+BLYNK_WRITE(V8){                                                                  //
+  h = param.asFloat();                                                            //
+    }                                                                             //
+BLYNK_WRITE(V9){                                                                  //
+  hodKrmeni = param.asInt();                                                      //
+    }                                                                             //
+BLYNK_WRITE(V10){                                                                 //
+  minKrmeni = param.asInt();                                                      //
+    }                                                                             //
+void loop(void) {
+    Blynk.run();                                                                  // Spusteni aplikace Blynk
+    int detected = digitalRead(DETECT);                                           // Inicializace pro snimac elektromagnetickeho pole
+    DateTime now = rtc.now();                                                     // Spusteni hodinoveho modulu
+    long hourRelay = (now.hour());                                                //
+    long minuteRelay = (now.minute());                                            //
+    long secondRelay = (now.second());                                            // Vytvoreni promennych pro vypocet casu
+    long sekundyNaVypocet = 3600 * hourRelay + 60 * minuteRelay + secondRelay;    //
+    long sekundyNaVypCerp = 3600 * hodKrmeni + 60 * minKrmeni - 360;              //
+    long sekundyNaZapCerp = 3600 * hodKrmeni + 60 * minKrmeni + 480;              //
+    if(sekundyNaVypocet>sekundyNaVypCerp && sekundyNaVypocet<sekundyNaZapCerp){   
+      digitalWrite(cerpadloPin, HIGH);                                            //
+    }                                                                             // Vypnuti cerpadla
+    else{                                                                         //
+      digitalWrite(cerpadloPin, LOW);                                             //
+    }                                                                             
+    if(sekundyNaVypocet > 3600 && sekundyNaVypocet < 3700){                       //
+      nekrmit=0;                                                                  //
+      zapis1=0;                                                                   // Resetovani osetrujicich promennych v 1 v noci
+      zapis2=0;                                                                   //
+      zapis3=0;                                                                   //
+    }
+    if(nekrmit == 0 && hourRelay >= hodKrmeni && minuteRelay >= minKrmeni){       //
+      uhel = davka*uhel;                                                          //
+      for(int i=0;i<(uhel*64/45);i++){                                            //
+      rotacePoSmeru();                                                            //
+      }                                                                           // Funkce pro ovladani motoru
+      delay(2000);                                                                //
+      while(DETECT == LOW){                                                       //
+        rotaceProtiSmeru();                                                       //
+      }                                                                           //
+      davka++;                                                                    //
+      nekrmit = 1;
+      if(davka == 8){                                                             //
+        Blynk.notify("Poslední dávka byla vydána! Nezapomeň doplnit krmení!");    // Resetovani promenne davka a poslani notifikace
+        davka=1;                                                                  //
+      }
+    }
+    svetloLoop();                                                                 // Vlastni funkce
+    topeniLoop();                                                                 //
+    
+    String nowTime = String(now.hour())+ ":" + now.minute() + ":" + now.second(); // Format casu a datumu
+    String nowDate = String(now.day())+ "." + now.month() + "." + now.year();     //
+    
+    if(hourRelay == prvniZapisHod && minuteRelay == prvniZapisMin && zapis1 == 0){//
+      File zapisDat = SD.open("mujSoubor.txt", FILE_WRITE);                       //
+      zapisDat.print(nowDate);                                                    //
+      zapisDat.print(",");                                                        //
+      zapisDat.print(lux);                                                        //
+      zapisDat.close();                                                           //
+      zapis1=1;                                                                   //
+    }                                                                             //
+    if(hourRelay == druhyZapisHod && minuteRelay == druhyZapisMin && zapis2 == 0){//
+      File zapisDat = SD.open("mujSoubor.txt", FILE_WRITE);                       // Zapisovani dat na kartu
+      zapisDat.print(lux);                                                        //
+      zapisDat.print(",");                                                        //
+      zapisDat.close();                                                           //
+      zapis2=1;                                                                   //
+    }                                                                             //
+    if(svetloPin == LOW && zapis3 == 0){                                          //
+      File zapisDat = SD.open("mujSoubor.txt", FILE_WRITE);                       //
+      zapisDat.print(nowTime);                                                    //
+      zapisDat.println(" ");                                                      //
+      zapisDat.close();                                                           //
+      zapis3=1;                                                                   //
+    }
+    fuzzy->setInput(1, sekundyNaVypocet);                                         //
+    fuzzy->setInput(2, avgLux);                                                   //
+    fuzzy->fuzzify();                                                             //
+    float output = fuzzy->defuzzify(1);                                           //
+    if(output>0,5){                                                               // Fuzzy a zapinani/vypinani svetla podle vystupu
+      digitalWrite(svetloPin, LOW);                                               //
+    }                                                                             //
+    else{                                                                         //
+      digitalWrite(svetloPin, HIGH);                                              //
+    }
+    Blynk.virtualWrite(V3, nowTime);                                              // Cas a datum v aplikaci
+    Blynk.virtualWrite(V4, nowDate);                                              //
+    delay(1000);
+}
