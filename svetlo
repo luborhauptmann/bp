@@ -1,0 +1,92 @@
+void zaplneniPole(){
+                                //
+  for(int u=0;u<300;u++)        // Zaplneni pole na prvnich 5 minut aby bylo svetlo vypnute
+    {                           //
+      pole[u] = 4000;
+      }
+    }
+void fuzzySetup(){
+  FuzzyInput *cas = new FuzzyInput(1); //instance FuzzyInput cas
+  
+  cas->addFuzzySet(den);     //připojení objektu FuzzySet k FuzzyInput
+  cas->addFuzzySet(brzy);
+  cas->addFuzzySet(akorat);
+  cas->addFuzzySet(pozde);
+  cas->addFuzzySet(noc);
+  fuzzy->addFuzzyInput(cas); //připojení FuzzyInput k Fuzzy
+
+  //instance FuzzyInput svitivost
+  FuzzyInput *svitivost = new FuzzyInput(2);
+  
+  svitivost->addFuzzySet(svetlo);   //připojení objektu FuzzySet k FuzzyInput
+  svitivost->addFuzzySet(tma);
+  fuzzy->addFuzzyInput(svitivost);  //připojení FuzzyInput k Fuzzy
+
+  //instance FuzzyOutput sviceni
+  FuzzyOutput *sviceni = new FuzzyOutput(1);
+
+  sviceni->addFuzzySet(vypnuto);   //připojení objektu FuzzySet k FuzzyOutput
+  sviceni->addFuzzySet(zapnuto);
+  fuzzy->addFuzzyOutput(sviceni);   //připojení FuzzyOutput k Fuzzy
+
+  //Pravidla kdy je vypnuto
+  FuzzyRuleAntecedent *ifCasDen = new FuzzyRuleAntecedent();  //pravidlo č.1
+  ifCasDen->joinSingle(den);
+  FuzzyRuleAntecedent *ifCasBrzyAndSvitivostSvetlo = new FuzzyRuleAntecedent(); //pravidlo č.2
+  ifCasBrzyAndSvitivostSvetlo->joinWithAND(brzy, svetlo);
+  FuzzyRuleAntecedent *ifCasAkoratAndSvitivostSvetlo = new FuzzyRuleAntecedent(); //pravidlo č.3
+  ifCasAkoratAndSvitivostSvetlo->joinWithAND(akorat, svetlo);
+  FuzzyRuleAntecedent *ifCasPozdeAndSvitivostSvetlo = new FuzzyRuleAntecedent(); //pravidlo č.4
+  ifCasPozdeAndSvitivostSvetlo->joinWithAND(pozde, svetlo);
+  FuzzyRuleConsequent *thenSviceniVypnuto = new FuzzyRuleConsequent(); //Output vypnuti
+  thenSviceniVypnuto->addOutput(vypnuto); 
+  FuzzyRule *fuzzyRule1 = new FuzzyRule(1, ifCasDen, thenSviceniVypnuto); //pravidlo č.1
+  fuzzy->addFuzzyRule(fuzzyRule1);
+  FuzzyRule *fuzzyRule2 = new FuzzyRule(2, ifCasBrzyAndSvitivostSvetlo, thenSviceniVypnuto); //pravidlo č.2
+  fuzzy->addFuzzyRule(fuzzyRule2);
+  FuzzyRule *fuzzyRule3 = new FuzzyRule(3, ifCasAkoratAndSvitivostSvetlo, thenSviceniVypnuto); //pravidlo č.3
+  fuzzy->addFuzzyRule(fuzzyRule3);
+  FuzzyRule *fuzzyRule4 = new FuzzyRule(4, ifCasPozdeAndSvitivostSvetlo, thenSviceniVypnuto); //pravidlo č.4
+  fuzzy->addFuzzyRule(fuzzyRule4);
+  
+  //Pravidla kdy je zapnuto
+  FuzzyRuleAntecedent *ifCasNoc = new FuzzyRuleAntecedent(); //pravidlo č.5
+  ifCasNoc->joinSingle(noc);
+  FuzzyRuleAntecedent *ifCasBrzyAndSvitivostTma = new FuzzyRuleAntecedent(); //pravidlo č.6
+  ifCasBrzyAndSvitivostTma->joinWithAND(brzy, tma);
+  FuzzyRuleAntecedent *ifCasAkoratAndSvitivostTma = new FuzzyRuleAntecedent(); //pravidlo č.7
+  ifCasAkoratAndSvitivostTma->joinWithAND(akorat, tma);
+  FuzzyRuleAntecedent *ifCasPozdeAndSvitivostTma = new FuzzyRuleAntecedent(); //pravidlo č.8
+  ifCasPozdeAndSvitivostTma->joinWithAND(pozde, tma);
+  FuzzyRuleConsequent *thenSviceniZapnuto = new FuzzyRuleConsequent(); //Output zapnuti
+  thenSviceniZapnuto->addOutput(zapnuto);
+  FuzzyRule *fuzzyRule5 = new FuzzyRule(5, ifCasNoc, thenSviceniZapnuto); //pravidlo č.5
+  fuzzy->addFuzzyRule(fuzzyRule5);
+  FuzzyRule *fuzzyRule6 = new FuzzyRule(6, ifCasBrzyAndSvitivostTma, thenSviceniZapnuto); //pravidlo č.6
+  fuzzy->addFuzzyRule(fuzzyRule6);
+  FuzzyRule *fuzzyRule7 = new FuzzyRule(7, ifCasAkoratAndSvitivostTma, thenSviceniZapnuto); //pravidlo č.7
+  fuzzy->addFuzzyRule(fuzzyRule7);
+  FuzzyRule *fuzzyRule8 = new FuzzyRule(8, ifCasPozdeAndSvitivostTma, thenSviceniZapnuto); //pravidlo č.8
+  fuzzy->addFuzzyRule(fuzzyRule8);
+}
+void svetloLoop(){
+  lux = lightMeter.readLightLevel();
+    if(lux>4000)
+    {                                       //
+      lux=4000;                             // Osetreni pro funkci Fuzzy, aby kazda namerena hodnota vetsi nez 4000 byla 4000
+      }                                     //
+    pole[ukazatel] = lux;
+    ukazatel = ukazatel + 1;                //
+    if(ukazatel>299)                        //
+    {                                       //
+      ukazatel = 0;                         //
+      }                                     //
+    float suma = 0;                         // Klouzavy prumer namerene intenzity svetla
+    int i = 1;                              //
+    for(i=1;i<300;i++)                      //
+    {                                       //
+      suma = suma + pole[i];                //
+      }                                     //
+    avgLux = suma/300;
+  Blynk.virtualWrite(V2, avgLux); 
+}
