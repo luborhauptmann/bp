@@ -1,0 +1,14 @@
+void topeniLoop()
+{
+  senzoryDS.requestTemperatures();                    //
+  t = senzoryDS.getTempCByIndex(0);                   // Zapinani a vypinani topeni s hysterezi
+    if(t>pt+h)                                        //
+    {
+      digitalWrite(topeniPin, HIGH);
+      }
+    if(t<pt+h)
+    {
+      digitalWrite(topeniPin, LOW);
+      }
+    Blynk.virtualWrite(V1, t);
+}
